@@ -26,11 +26,10 @@ tree = bot.tree
 # ------------------------
 # WHITELIST & SETTINGS
 # ------------------------
-WHITELIST = {843180408152784936, 1048582528455430184,
-             235148962103951360, 557628352828014614,
+WHITELIST = {1379540360564310167,1374457687840133222,
 }
 
-AUTO_KICK_IDS = {1159469934989025290, 662596869221908480
+AUTO_KICK_IDS = {
 }
 
 DELETE_TIMEOUT = 3600
@@ -41,21 +40,29 @@ webhook_violations = {}
 kick_violations = defaultdict(int)
 ban_violations = defaultdict(int)
 
-AUTHORIZED_ROLE_IDS = ()
+AUTHORIZED_ROLE_IDS = (1402996797588242535)
 MAX_ALLOWED_KICKS = 3
 MAX_ALLOWED_BANS = 3
+
+SETUP_BACKUP_WHITELIST = {
+    1374457687840133222,  # Beispielhafte User-IDs
+    1379540360564310167,
+}
+
+def is_setup_whitelisted(user_id: int) -> bool:
+    return user_id in SETUP_BACKUP_WHITELIST
 
 invite_pattern = re.compile(
     r"(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/(invite|oauth2\/authorize))\/\w+|(?:discord(app)?\.com.*invite)", re.I
 )
 
 # ------------------------
-# Timeout-Spam Tracking (5 Timeouts in 30 Sek -> Kick)
+# Timeout-Spam Tracking (5 Timeouts in 120 Sek -> Kick)
 # ------------------------
 
 timeout_actions = defaultdict(list)  # moderator_id : [timestamps]
 TIMEOUT_SPAM_LIMIT = 5
-TIME_WINDOW = 30  # Sekunden
+TIME_WINDOW = 120  # Sekunden
 
 async def register_timeout_action(guild, moderator_id):
     now = time.time()
@@ -68,7 +75,7 @@ async def register_timeout_action(guild, moderator_id):
         member = guild.get_member(moderator_id)
         if member:
             try:
-                await member.kick(reason="Timeout-Spam (mehr als 5 Timeouts in 30 Sekunden)")
+                await member.kick(reason="Timeout-Spam (mehr als 5 Timeouts in 120 Sekunden)")
                 print(f"🥾 {member} wurde wegen Timeout-Spam gekickt.")
                 timeout_actions[moderator_id] = []  # Reset nach Kick
             except Exception as e:
@@ -160,6 +167,10 @@ async def create_channel_from_backup(guild: discord.Guild, data):
 
 @tree.command(name="backup", description="Erstelle ein Backup aller Kanäle im Server.")
 async def backup(interaction: discord.Interaction):
+    if not is_setup_whitelisted(interaction.user.id):
+        await interaction.response.send_message("❌ Du bist nicht berechtigt, diesen Befehl zu verwenden.", ephemeral=True)
+        return
+
     guild = interaction.guild
     if not guild:
         await interaction.response.send_message("❌ Kein Server gefunden.", ephemeral=True)
@@ -177,6 +188,10 @@ async def backup(interaction: discord.Interaction):
 @tree.command(name="reset", description="Starte Reset-Aktion. Optionen: 'server'")
 @app_commands.describe(option="Option für Reset, z.B. 'server'")
 async def reset(interaction: discord.Interaction, option: str):
+    if not is_setup_whitelisted(interaction.user.id):
+        await interaction.response.send_message("❌ Du bist nicht berechtigt, diesen Befehl zu verwenden.", ephemeral=True)
+        return
+
     guild = interaction.guild
     if not guild:
         await interaction.response.send_message("❌ Kein Server gefunden.", ephemeral=True)
@@ -195,6 +210,7 @@ async def reset(interaction: discord.Interaction, option: str):
     for ch in guild.channels:
         try:
             await ch.delete(reason="Reset Server durch Bot")
+            await asyncio.sleep(0.6)
         except Exception as e:
             print(f"Fehler beim Löschen von Kanal {ch.name}: {e}")
 
@@ -225,7 +241,7 @@ async def reset(interaction: discord.Interaction, option: str):
             ch_data["category_id"] = None
 
         await create_channel_from_backup(guild, ch_data)
-
+        await asyncio.sleep(0.6)
     await interaction.followup.send("✅ Server Reset abgeschlossen. Kanäle wurden wiederhergestellt.")
 
 # ------------------------
@@ -250,8 +266,8 @@ async def on_member_join(member):
                 adder = entry.user
                 if adder and not is_whitelisted(adder.id):
                     try:
-                        await adder.kick(reason="🛡️ Bot-Join-Schutz: Nutzer hat Bot hinzugefügt")
-                        await member.kick(reason="🛡️ Bot-Join-Schutz: Bot wurde entfernt")
+                        await adder.ban(reason="🛡️ Bot-Join-Schutz: Nutzer hat Bot hinzugefügt")
+                        await member.ban(reason="🛡️ Bot-Join-Schutz: Bot wurde entfernt")
                         print(f"🥾 {adder} und Bot {member} wurden wegen Bot-Join-Schutz gekickt.")
                     except Exception as e:
                         print(f"❌ Fehler beim Kick (Bot-Join-Schutz): {e}")
